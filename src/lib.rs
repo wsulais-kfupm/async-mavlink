@@ -108,6 +108,8 @@ pub use util::encode_param_id;
 pub struct AsyncMavConn<M: mavlink::Message> {
     task_dispatcher: UnboundedSender<Task<M>>,
     last_heartbeat: Arc<ArcSwapOption<Instant>>,
+		/// A channel for all MAVLink messages
+		pub msg_rx: mpsc::UnboundedReceiver<M>,
 }
 
 enum Task<M: mavlink::Message> {
@@ -161,6 +163,7 @@ impl<M: 'static + mavlink::Message + Clone + Debug + Send + Sync> AsyncMavConn<M
             mavlink_version
         );
         let (task_dispatcher, incoming_tasks) = mpsc::unbounded();
+				let (mut msg_tx, msg_rx) = mpsc::unbounded();
         let last_heartbeat = Arc::new(ArcSwapOption::from(None));
 
         let f = {
@@ -239,6 +242,7 @@ impl<M: 'static + mavlink::Message + Clone + Debug + Send + Sync> AsyncMavConn<M
                                     message
                                 );
                             }
+														msg_tx.send(message.clone()).await.expect("able to send messages");
                             subscriptions
                                 .entry(MavMessageType::new(&message))
                                 .or_insert_with(Vec::new)
@@ -263,6 +267,7 @@ impl<M: 'static + mavlink::Message + Clone + Debug + Send + Sync> AsyncMavConn<M
             Arc::new(Self {
                 task_dispatcher,
                 last_heartbeat,
+								msg_rx,
             }),
             Box::pin(f),
         ))
