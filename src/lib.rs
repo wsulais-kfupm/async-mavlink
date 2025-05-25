@@ -109,7 +109,7 @@ pub struct AsyncMavConn<M: mavlink::Message> {
     task_dispatcher: UnboundedSender<Task<M>>,
     last_heartbeat: Arc<ArcSwapOption<Instant>>,
 		/// A channel for all MAVLink messages
-		pub msg_rx: mpsc::UnboundedReceiver<M>,
+		pub msg_rx: futures::lock::Mutex<mpsc::UnboundedReceiver<M>>,
 }
 
 enum Task<M: mavlink::Message> {
@@ -164,6 +164,7 @@ impl<M: 'static + mavlink::Message + Clone + Debug + Send + Sync> AsyncMavConn<M
         );
         let (task_dispatcher, incoming_tasks) = mpsc::unbounded();
 				let (mut msg_tx, msg_rx) = mpsc::unbounded();
+        let msg_rx = futures::lock::Mutex::new(msg_rx);
         let last_heartbeat = Arc::new(ArcSwapOption::from(None));
 
         let f = {
@@ -252,7 +253,7 @@ impl<M: 'static + mavlink::Message + Clone + Debug + Send + Sync> AsyncMavConn<M
                                         futures::executor::block_on(
                                             backchannel.send(message.clone()),
                                         )
-                                        .expect("unable to do this");
+                                            .expect("unable to do this");
                                         true
                                     }
                                 });
